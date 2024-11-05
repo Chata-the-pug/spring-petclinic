@@ -17,16 +17,20 @@ pipeline {
             }
         }
         stage('Build') {
+            when {
+                anyOf {
+                    branch 'main'
+                    branch 'develop'
+                }
+            }
             steps {
                 container('maven') {
                     println '02# Stage - Build'
                     println '(develop y main):  Build a jar file.'
                     sh './mvnw package -Dmaven.test.skip=true'
-                    archiveArtifacts artifacts: 'target/*.jar', fingerprint: true
                 }
             }
         }
-
         stage('Unit Tests') {
             when {
                 anyOf {
@@ -34,25 +38,24 @@ pipeline {
                     branch 'develop'
                 }
             }
-                steps {
-                    container('maven') {
-                        println '03# Stage - Unit Tests'
-                        println '(develop y main): Launch unit tests.'
-                        sh '''
-                            mvn test
-                        '''
-                        junit '**/target/surefire-reports/*.xml'
-                    }
+            steps {
+                container('maven') {
+                    println '03# Stage - Unit Tests'
+                    println '(develop y main): Launch unit tests.'
+                    sh '''
+                        mvn test
+                    '''
+                    junit '**/target/surefire-reports/*.xml'
                 }
+            }
         }
-
-            stage('Publish Artifact') {
-    when {
-        anyOf {
-            branch 'main'
-            branch 'develop'
-        }
-    }
+        stage('Publish Artifact') {
+            when {
+                anyOf {
+                    branch 'main'
+                    branch 'develop'
+                }
+            }
             steps {
                 container('maven') {
                     println '04# Stage - Deploy Artifact'
@@ -69,15 +72,13 @@ pipeline {
                 }
             }
         }
-
-
         stage('Build & Publish Container Image') {
-    when {
-        anyOf {
-            branch 'main'
-            branch 'develop'
-        }
-    }
+            when {
+                anyOf {
+                    branch 'main'
+                    branch 'develop'
+                }
+            }
             steps {
                 container('kaniko') {
                     println '05# Stage - Build & Publish Container Image'
@@ -89,11 +90,37 @@ pipeline {
                         --dockerfile Dockerfile \
                         --destination=nexus-service:8082/repository/docker/spring-petclinic:3.3.0-SNAPSHOT \
                         --destination=nexus-service:8082/repository/docker/spring-petclinic:latest \
-                        --build-arg VERSION=3.3.0-SNAPSHOT.jar
+                        --build-arg JAR_FILE=spring-petclinic-3.3.0-SNAPSHOT.jar
                     '''
                 }
             }
         }
+        stage('Deploy petclinic') {
+            when {
+                anyOf {
+                    branch 'main'
+                    branch 'develop'
+                }
+            }
+            steps {
+                println '06# Stage - Deploy petclinic'
+                println '(develop y main): Deploy petclinic app to MicroK8s.'
+                sh '''
+                    curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+                    chmod +x kubectl
+                    mkdir -p ~/.local/bin
+                    #mv ./kubectl ~/.local/bin/kubectl
 
+                    ./kubectl version --client
+                    ./kubectl get all
+
+                    ./kubectl create deployment petclinic --image <IP_SERVICIO_NEXUS>:8082/repository/docker/spring-petclinic:latest || \
+                    echo 'Deplyment petclinic already exists, creating service...'
+                    ./kubectl expose deployment petclinic --port 8080 --target-port 8888 --selector app=petclinic --type ClusterIP --name petclinic
+
+                    ./kubectl get all
+                '''
+            }
+        }
     }
 }
