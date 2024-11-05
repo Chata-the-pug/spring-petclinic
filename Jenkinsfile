@@ -114,7 +114,7 @@ pipeline {
                     ./kubectl version --client
                     ./kubectl get all
 
-                    ./kubectl create deployment petclinic --image <IP_SERVICIO_NEXUS>:8082/repository/docker/spring-petclinic:latest || \
+                    ./kubectl create deployment petclinic --image 10.152.183.195:8082/repository/docker/spring-petclinic:latest || \
                     echo 'Deplyment petclinic already exists, creating service...'
                     ./kubectl expose deployment petclinic --port 8080 --target-port 8888 --selector app=petclinic --type ClusterIP --name petclinic
 
