@@ -44,7 +44,56 @@ pipeline {
                         junit '**/target/surefire-reports/*.xml'
                     }
                 }
-        }    
+        }
+
+            stage('Publish Artifact') {
+    when {
+        anyOf {
+            branch 'main'
+            branch 'develop'
+        }
+    }
+            steps {
+                container('maven') {
+                    println '04# Stage - Deploy Artifact'
+                    println '(develop y main): Deploy artifact to repository.'
+                    sh '''
+                        mvn -e deploy:deploy-file \
+                            -Durl=http://nexus-service:8081/repository/maven-snapshots \
+                            -DgroupId=local.moradores \
+                            -DartifactId=spring-petclinic \
+                            -Dversion=3.3.0-SNAPSHOT \
+                            -Dpackaging=jar \
+                            -Dfile=target/spring-petclinic-3.3.0-SNAPSHOT.jar
+                    '''
+                }
+            }
+        }
+
+
+        stage('Build & Publish Container Image') {
+    when {
+        anyOf {
+            branch 'main'
+            branch 'develop'
+        }
+    }
+            steps {
+                container('kaniko') {
+                    println '05# Stage - Build & Publish Container Image'
+                    println '(develop y main): Build container image with Kaniko & Publish to container registry.'
+                    sh '''
+                        /kaniko/executor \
+                        --context `pwd` \
+                        --insecure \
+                        --dockerfile Dockerfile \
+                        --destination=nexus-service:8082/repository/docker/spring-petclinic:3.3.0-SNAPSHOT \
+                        --destination=nexus-service:8082/repository/docker/spring-petclinic:latest \
+                        --build-arg VERSION=3.3.0-SNAPSHOT.jar
+                    '''
+                }
+            }
+        }
 
     }
 }
